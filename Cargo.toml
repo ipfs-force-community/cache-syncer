@@ -1,0 +1,23 @@
+[package]
+name = "cache-syncer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uluru = "3.0.0"
+bitvec = { version = "1.0.1", features = ["serde"] }
+arrayvec = { version = "0.7", default-features = false }
+getrandom = { version = "0.2" }
+siphasher = { version = "1.0.1", features = ["serde"] }
+
+serde = { version = "1.0", features = ["derive"] }
+postcard = { version = "1.0.8", features = ["alloc"], default-features = false }
+
+tokio = { version = "1", features = ["fs", "rt", "sync"] }
+tracing = "0.1.40"
+thiserror = "1.0.58"
+parking_lot = "0.12.1"
+anyhow = "1.0.82"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
