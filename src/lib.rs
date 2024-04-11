@@ -32,7 +32,6 @@ where
     }
 
     pub async fn load(&self, key: K) -> anyhow::Result<SyncStatus<K, V>> {
-        println!("Syncer load");
         self.inner.lock().await.load(key).await
     }
 
@@ -89,34 +88,34 @@ where
 
     async fn load(&mut self, key: K) -> anyhow::Result<SyncStatus<K, V>> {
         // check bloom filter
-        println!("syncer inner load: wait for check_and_set bloom filter");
+        tracing::debug!("syncer inner load: wait for check_and_set bloom filter");
         if !self.bloom_filter.check_and_set(&key) {
             // TODO:
             // check disk cache & update state.
             // if we already init bloom filter, we can promise it not exist in disk.
             // so we can skip this.
             if self.disk_cache.exist(&key).await {
-                println!("syncer inner load: not exist in bloom filter, load_from_disk");
+                tracing::debug!("syncer inner load: not exist in bloom filter, load_from_disk");
                 return self.load_from_disk(key).await;
             }
-            println!("syncer inner load: not exist in bloom filter & disk, Need Sync");
+            tracing::debug!("syncer inner load: not exist in bloom filter & disk, Need Sync");
             return Ok(self.add_sync_process(key));
         }
-        println!("syncer inner load: check_and_set bloom filter");
+        tracing::debug!("syncer inner load: check_and_set bloom filter");
 
         // check hot cache
         if let Some(cache) = self.load_from_hot_cache(&key) {
             return Ok(SyncStatus::Synced(cache));
         }
-        println!("syncer inner load: load_from_hot_cache");
+        tracing::debug!("syncer inner load: load_from_hot_cache");
 
         // check in-process sync task
         if let Some(status) = self.check_process(&key) {
             return Ok(status);
         }
-        println!("syncer inner load: check_process");
+        tracing::debug!("syncer inner load: check_process");
 
-        println!("syncer inner load: wait for load_from_disk");
+        tracing::debug!("syncer inner load: wait for load_from_disk");
         // check disk cache
         self.load_from_disk(key).await
     }
@@ -151,7 +150,7 @@ where
                 return Some(SyncStatus::NeedSync(key.clone()));
             }
 
-            return Some(SyncStatus::AlreadyInProcess);
+            return Some(SyncStatus::AlreadyInProcess(key.clone()));
         }
 
         None
@@ -220,7 +219,7 @@ impl<K: Clone, V: Clone> CacheEnrty<K, V> {
 
 #[derive(Debug)]
 pub enum SyncStatus<K, V> {
-    AlreadyInProcess,
+    AlreadyInProcess(K),
     NeedSync(K),
     Synced(V),
 }

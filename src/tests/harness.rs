@@ -1,6 +1,5 @@
 use std::{
     fs, io, mem,
-    ops::Deref,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -53,34 +52,6 @@ impl PieceIndex {
     }
 }
 
-#[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct PieceArray([u8; Piece::SIZE]);
-
-impl AsRef<[u8]> for PieceArray {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl AsMut<[u8]> for PieceArray {
-    #[inline]
-    fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.0
-    }
-}
-
-impl PieceArray {
-    /// Create boxed value without hitting stack overflow
-    #[inline]
-    pub fn new_boxed() -> Box<Self> {
-        // TODO: Should have been just `::new()`, but https://github.com/rust-lang/rust/issues/53827
-        // SAFETY: Data structure filled with zeroes is a valid invariant
-        unsafe { Box::<Self>::new_zeroed().assume_init() }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct Piece(pub Vec<u8>);
 
@@ -89,30 +60,12 @@ impl Piece {
     pub const SIZE: usize = 1048672;
 }
 
-// impl Deref for Piece {
-//     type Target = PieceArray;
-
-//     #[inline]
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
 impl Default for Piece {
     #[inline]
     fn default() -> Self {
-        let mut v = Vec::with_capacity(Piece::SIZE);
-        unsafe { v.set_len(Piece::SIZE) };
-        Self(v)
+        Self(vec![0u8; Piece::SIZE])
     }
 }
-
-// impl From<Piece> for Vec<u8> {
-//     #[inline]
-//     fn from(piece: Piece) -> Self {
-//         piece.0 .0.to_vec()
-//     }
-// }
 
 /// Disk piece cache open error
 #[derive(Debug, thiserror::Error)]
@@ -146,6 +99,11 @@ impl DiskPieceCache {
                 piece_dir: directory.to_path_buf(),
             }),
         })
+    }
+
+    pub async fn remove_piece(&self, piece_index: PieceIndex) {
+        let (filename, _) = self.piece_filenames(piece_index);
+        tokio::fs::remove_file(filename).await.unwrap();
     }
 
     pub async fn write_piece(
