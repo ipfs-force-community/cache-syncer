@@ -88,7 +88,6 @@ where
 
     async fn load(&mut self, key: K) -> anyhow::Result<SyncStatus<K, V>> {
         // check bloom filter
-        tracing::debug!("syncer inner load: wait for check_and_set bloom filter");
         if !self.bloom_filter.check_and_set(&key) {
             // TODO:
             // check disk cache & update state.
@@ -101,19 +100,18 @@ where
             tracing::debug!("syncer inner load: not exist in bloom filter & disk, Need Sync");
             return Ok(self.add_sync_process(key));
         }
-        tracing::debug!("syncer inner load: check_and_set bloom filter");
 
         // check hot cache
         if let Some(cache) = self.load_from_hot_cache(&key) {
+            tracing::debug!("syncer inner load: load_from_hot_cache");
             return Ok(SyncStatus::Synced(cache));
         }
-        tracing::debug!("syncer inner load: load_from_hot_cache");
 
         // check in-process sync task
         if let Some(status) = self.check_process(&key) {
+            tracing::debug!("syncer inner load: in-process");
             return Ok(status);
         }
-        tracing::debug!("syncer inner load: check_process");
 
         tracing::debug!("syncer inner load: wait for load_from_disk");
         // check disk cache
