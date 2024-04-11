@@ -142,7 +142,7 @@ where
         if let Some(in_process) = self.in_process.get_mut(key) {
             in_process.frequency += 1;
 
-            if in_process.instant.elapsed() >= self.timeout {
+            if in_process.is_timeout(self.timeout) {
                 // timeout, reset process instant & return NeedSync
                 in_process.instant = std::time::Instant::now();
                 return Some(SyncStatus::NeedSync(key.clone()));
@@ -160,6 +160,7 @@ where
             ProcessEntry {
                 instant: std::time::Instant::now(),
                 frequency: 1,
+                syncer_num: 1,
             },
         );
         SyncStatus::NeedSync(key)
@@ -201,6 +202,22 @@ where
 struct ProcessEntry {
     instant: std::time::Instant,
     frequency: i16,
+    syncer_num: u16,
+}
+
+impl ProcessEntry {
+    fn is_timeout(&self, timeout: Duration) -> bool {
+        self.instant.elapsed() >= timeout * self.back_off()
+    }
+
+    fn back_off(&self) -> u32 {
+        match self.syncer_num {
+            1 => 1,
+            2 => 10,
+            3 => 30,
+            _ => 30,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

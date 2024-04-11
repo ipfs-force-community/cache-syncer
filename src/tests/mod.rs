@@ -2,7 +2,7 @@ mod harness;
 use harness::{DiskPieceCache, Piece, PieceIndex};
 use tokio::{
     sync::{
-        mpsc::{unbounded_channel, UnboundedSender},
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
     time::{sleep, sleep_until, Instant},
@@ -93,9 +93,40 @@ async fn store_and_check_response(index: u64, piece: Piece, tx: &UnboundedSender
     }
 }
 
+async fn run(
+    mut rx: UnboundedReceiver<Request>,
+    syncer: Syncer<PieceIndex, Piece, DiskPieceCache, 100>,
+    disk_cache: DiskPieceCache,
+) {
+    loop {
+        if let Some(Request { event, response }) = rx.recv().await {
+            match event {
+                Event::Load(piece_index) => {
+                    let index: u64 = piece_index.into();
+                    println!("handle load request: {index}");
+                    let res = syncer.load(piece_index).await.into();
+                    println!("load request done, send resp");
+                    let _ = response.send(res);
+                }
+                Event::Store(piece_index, piece) => {
+                    let index: u64 = piece_index.into();
+                    println!("handle store request: {index}");
+                    let _ = response.send(syncer.store(piece_index, piece).await.into());
+                }
+                Event::Shutdown(pieces) => {
+                    for p in pieces {
+                        disk_cache.remove_piece(p).await;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn integration() {
-    let (tx, mut rx) = unbounded_channel::<Request>();
+    let (tx, rx) = unbounded_channel::<Request>();
 
     let disk_cache = DiskPieceCache::open(&Path::new("./pieces-cache")).unwrap();
     let syncer: Syncer<PieceIndex, Piece, DiskPieceCache, 100> = Syncer::new(
@@ -104,7 +135,6 @@ async fn integration() {
         0.01,
         std::time::Duration::from_secs(10),
     );
-    println!("generated syncer");
 
     // worker 1
     let tx1 = tx.clone();
@@ -148,28 +178,58 @@ async fn integration() {
     });
 
     // manager
-    loop {
-        if let Some(Request { event, response }) = rx.recv().await {
-            match event {
-                Event::Load(piece_index) => {
-                    let index: u64 = piece_index.into();
-                    println!("handle load request: {index}");
-                    let res = syncer.load(piece_index).await.into();
-                    println!("load request done, send resp");
-                    let _ = response.send(res);
-                }
-                Event::Store(piece_index, piece) => {
-                    let index: u64 = piece_index.into();
-                    println!("handle store request: {index}");
-                    let _ = response.send(syncer.store(piece_index, piece).await.into());
-                }
-                Event::Shutdown(pieces) => {
-                    for p in pieces {
-                        disk_cache.remove_piece(p).await;
-                    }
-                    break;
-                }
-            }
-        }
-    }
+    run(rx, syncer, disk_cache).await
+}
+
+#[tokio::test]
+async fn in_process_backoff() {
+    let (tx, rx) = unbounded_channel::<Request>();
+    let disk_cache = DiskPieceCache::open(&Path::new("./pieces-cache")).unwrap();
+    let syncer: Syncer<PieceIndex, Piece, DiskPieceCache, 100> = Syncer::new(
+        disk_cache.clone(),
+        1_000_000,
+        0.01,
+        std::time::Duration::from_secs(1),
+    );
+
+    let now = Instant::now();
+
+    // worker 1
+    let tx1 = tx.clone();
+    tokio::task::spawn(async move {
+        // load & store 0
+        load_and_sync(0, true, &tx1).await;
+    });
+
+    // worker 2
+    let tx2 = tx.clone();
+    tokio::task::spawn(async move {
+        sleep_until(now + Duration::from_secs_f32(0.5)).await;
+        load_and_sync(0, false, &tx2).await;
+
+        sleep_until(now + Duration::from_secs_f64(1.3)).await;
+        load_and_sync(0, true, &tx2).await;
+
+        sleep_until(now + Duration::from_secs_f64(10.5)).await;
+        load_and_sync(0, false, &tx2).await;
+    });
+
+    // worker 3
+    let tx3 = tx;
+    tokio::task::spawn(async move {
+        sleep_until(now + Duration::from_secs_f32(0.6)).await;
+        load_and_sync(0, false, &tx3).await;
+
+        sleep_until(now + Duration::from_secs_f64(1.5)).await;
+        load_and_sync(0, false, &tx3).await;
+
+        sleep_until(now + Duration::from_secs_f64(10.3)).await;
+        load_and_sync(0, true, &tx3).await;
+
+        sleep(Duration::from_secs(1)).await;
+        let (req, _) = new_request(Event::Shutdown(vec![]));
+        tx3.send(req).unwrap();
+    });
+
+    run(rx, syncer, disk_cache).await
 }
