@@ -12,6 +12,7 @@ pub use cache::Cache;
 mod disk_cache;
 pub use disk_cache::DiskCache;
 
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, hash::Hash, time::Duration};
 
 #[derive(Debug)]
@@ -232,7 +233,8 @@ impl<K: Clone, V: Clone> CacheEnrty<K, V> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum SyncStatus<K, V> {
     AlreadyInProcess(K),
     NeedSync(K),
