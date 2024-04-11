@@ -10,7 +10,7 @@ mod cache;
 pub use cache::Cache;
 
 mod disk_cache;
-use disk_cache::DiskCache;
+pub use disk_cache::DiskCache;
 
 use std::{collections::HashMap, hash::Hash, time::Duration};
 
