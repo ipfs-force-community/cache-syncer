@@ -32,6 +32,10 @@ where
         }
     }
 
+    pub async fn touch(&self, keys: Vec<K>) {
+        self.inner.lock().await.touch(keys)
+    }
+
     pub async fn load(&self, key: K) -> anyhow::Result<SyncStatus<K, V>> {
         self.inner.lock().await.load(key).await
     }
@@ -70,6 +74,15 @@ where
             disk_cache,
             in_process: HashMap::new(),
             timeout,
+        }
+    }
+
+    fn touch(&mut self, keys: Vec<K>) {
+        for key in keys {
+            self.in_process
+                .entry(key.clone())
+                .and_modify(|entry| entry.touch())
+                .or_default();
         }
     }
 
@@ -156,14 +169,7 @@ where
     }
 
     fn add_sync_process(&mut self, key: K) -> SyncStatus<K, V> {
-        self.in_process.insert(
-            key.clone(),
-            ProcessEntry {
-                instant: std::time::Instant::now(),
-                frequency: 1,
-                syncer_num: 1,
-            },
-        );
+        self.in_process.insert(key.clone(), Default::default());
         SyncStatus::NeedSync(key)
     }
 
@@ -206,7 +212,22 @@ struct ProcessEntry {
     syncer_num: u16,
 }
 
+impl Default for ProcessEntry {
+    fn default() -> Self {
+        Self {
+            instant: std::time::Instant::now(),
+            frequency: 1,
+            syncer_num: 1,
+        }
+    }
+}
+
 impl ProcessEntry {
+    fn touch(&mut self) {
+        self.instant = std::time::Instant::now();
+        self.frequency += 1;
+    }
+
     fn is_timeout(&self, timeout: Duration) -> bool {
         self.instant.elapsed() >= timeout * self.back_off()
     }
