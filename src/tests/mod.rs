@@ -9,7 +9,7 @@ use tokio::{
 };
 
 use anyhow::Result;
-use std::{path::Path, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use crate::{SyncStatus, Syncer};
 
@@ -95,9 +95,10 @@ async fn store_and_check_response(index: u64, piece: Piece, tx: &UnboundedSender
 
 async fn run(
     mut rx: UnboundedReceiver<Request>,
-    syncer: Syncer<PieceIndex, Piece, DiskPieceCache, 100>,
+    syncer: impl Into<Arc<Syncer<PieceIndex, Piece, DiskPieceCache, 100>>>,
     disk_cache: DiskPieceCache,
 ) {
+    let syncer = syncer.into();
     loop {
         if let Some(Request { event, response }) = rx.recv().await {
             match event {
@@ -182,22 +183,25 @@ async fn integration() {
 }
 
 #[tokio::test]
-async fn in_process_backoff() {
+async fn touch_and_wait_in_process_backoff() {
     let (tx, rx) = unbounded_channel::<Request>();
     let disk_cache = DiskPieceCache::open(&Path::new("./pieces-cache")).unwrap();
-    let syncer: Syncer<PieceIndex, Piece, DiskPieceCache, 100> = Syncer::new(
+    let syncer: Arc<Syncer<PieceIndex, Piece, DiskPieceCache, 100>> = Syncer::new(
         disk_cache.clone(),
         1_000_000,
         0.01,
         std::time::Duration::from_secs(1),
-    );
+    )
+    .into();
 
     let now = Instant::now();
 
     // worker 1
     let tx1 = tx.clone();
+    let syncer2 = syncer.clone();
     tokio::task::spawn(async move {
-        // load & store 0
+        // touch piece 0
+        syncer2.touch(0u64.into()).await;
         load_and_sync(0, true, &tx1).await;
     });
 
@@ -225,6 +229,78 @@ async fn in_process_backoff() {
 
         sleep_until(now + Duration::from_secs_f64(10.3)).await;
         load_and_sync(0, true, &tx3).await;
+
+        sleep(Duration::from_secs(1)).await;
+        let (req, _) = new_request(Event::Shutdown(vec![]));
+        tx3.send(req).unwrap();
+    });
+
+    run(rx, syncer, disk_cache).await
+}
+
+#[tokio::test]
+async fn touch_many_and_wait_in_process_backoff() {
+    let (tx, rx) = unbounded_channel::<Request>();
+    let disk_cache = DiskPieceCache::open(&Path::new("./pieces-cache")).unwrap();
+    let syncer: Arc<Syncer<PieceIndex, Piece, DiskPieceCache, 100>> = Syncer::new(
+        disk_cache.clone(),
+        1_000_000,
+        0.01,
+        std::time::Duration::from_secs(1),
+    )
+    .into();
+
+    let now = Instant::now();
+
+    // worker 1
+    let tx1 = tx.clone();
+    let syncer2 = syncer.clone();
+    tokio::task::spawn(async move {
+        // touch piece 0
+        syncer2
+            .touch_many(vec![0u64.into(), 1u64.into(), 2u64.into()])
+            .await;
+        load_and_sync(0, true, &tx1).await;
+        load_and_sync(1, true, &tx1).await;
+        load_and_sync(2, true, &tx1).await;
+    });
+
+    // worker 2
+    let tx2 = tx.clone();
+    tokio::task::spawn(async move {
+        sleep_until(now + Duration::from_secs_f32(0.5)).await;
+        load_and_sync(0, false, &tx2).await;
+        load_and_sync(1, false, &tx2).await;
+        load_and_sync(2, false, &tx2).await;
+
+        sleep_until(now + Duration::from_secs_f64(1.3)).await;
+        load_and_sync(0, true, &tx2).await;
+        load_and_sync(1, true, &tx2).await;
+        load_and_sync(2, true, &tx2).await;
+
+        sleep_until(now + Duration::from_secs_f64(10.5)).await;
+        load_and_sync(0, false, &tx2).await;
+        load_and_sync(1, false, &tx2).await;
+        load_and_sync(2, false, &tx2).await;
+    });
+
+    // worker 3
+    let tx3 = tx;
+    tokio::task::spawn(async move {
+        sleep_until(now + Duration::from_secs_f32(0.6)).await;
+        load_and_sync(0, false, &tx3).await;
+        load_and_sync(1, false, &tx3).await;
+        load_and_sync(2, false, &tx3).await;
+
+        sleep_until(now + Duration::from_secs_f64(1.5)).await;
+        load_and_sync(0, false, &tx3).await;
+        load_and_sync(1, false, &tx3).await;
+        load_and_sync(2, false, &tx3).await;
+
+        sleep_until(now + Duration::from_secs_f64(10.3)).await;
+        load_and_sync(0, true, &tx3).await;
+        load_and_sync(1, true, &tx3).await;
+        load_and_sync(2, true, &tx3).await;
 
         sleep(Duration::from_secs(1)).await;
         let (req, _) = new_request(Event::Shutdown(vec![]));

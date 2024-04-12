@@ -32,8 +32,12 @@ where
         }
     }
 
-    pub async fn touch(&self, keys: Vec<K>) {
-        self.inner.lock().await.touch(keys)
+    pub async fn touch(&self, key: K) {
+        self.inner.lock().await.touch(key)
+    }
+
+    pub async fn touch_many(&self, keys: Vec<K>) {
+        self.inner.lock().await.touch_many(keys)
     }
 
     pub async fn load(&self, key: K) -> anyhow::Result<SyncStatus<K, V>> {
@@ -77,12 +81,16 @@ where
         }
     }
 
-    fn touch(&mut self, keys: Vec<K>) {
+    fn touch(&mut self, key: K) {
+        self.in_process
+            .entry(key)
+            .and_modify(ProcessEntry::touch)
+            .or_default();
+    }
+
+    fn touch_many(&mut self, keys: Vec<K>) {
         for key in keys {
-            self.in_process
-                .entry(key.clone())
-                .and_modify(|entry| entry.touch())
-                .or_default();
+            self.touch(key);
         }
     }
 
