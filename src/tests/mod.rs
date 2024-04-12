@@ -309,10 +309,3 @@ async fn touch_many_and_wait_in_process_backoff() {
 
     run(rx, syncer, disk_cache).await
 }
-
-// TODO: add unit test for touch
-#[tokio::test]
-async fn touch() {
-    // TODO
-    todo!()
-}
