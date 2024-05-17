@@ -1,24 +1,45 @@
+use super::Cache;
+
 #[derive(Debug)]
-pub struct Cache<T, const N: usize> {
-    pub(self) entries: arrayvec::ArrayVec<Entry<T>, N>,
-    pub(self) lru_cache: uluru::LRUCache<T, N>,
+pub struct LfruCache<T, const FN: usize, const RN: usize> {
+    pub(self) entries: arrayvec::ArrayVec<Entry<T>, FN>,
+    pub(self) lru_cache: uluru::LRUCache<T, RN>,
     /// Index of the min entry. Because our frequency will only decrease, so we don't need to store the index `head`.
     tail: u16,
     min: i16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Entry<T> {
     val: T,
     /// The frequency will only decrease.
     pre_freq: i16,
 }
 
-impl<T: Clone, const N: usize> Cache<T, N> {
+impl<T, const FN: usize, const RN: usize> Cache<T> for LfruCache<T, FN, RN> {
+    fn insert(&mut self, val: T) {
+        self._insert(val, 0)
+    }
+
+    fn insert_with_weight(&mut self, val: T, weight: usize) {
+        self._insert(val, weight)
+    }
+
+    fn find<F: FnMut(&T) -> bool>(&mut self, pred: F) -> Option<&T> {
+        self._find(pred)
+    }
+
+    fn lookup<F: FnMut(&T) -> bool>(&mut self, pred: F) -> Option<&T> {
+        self._lookup(pred)
+    }
+}
+
+impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
     /// Insert a given key in the cache.
     ///
     /// If the cache is full, the min item will be removed and returned.
-    pub fn insert(&mut self, val: T, pre_freq: i16) {
+    fn _insert(&mut self, val: T, weight: usize) {
+        let pre_freq = weight.try_into().unwrap_or(i16::MAX);
         let entry = Entry { val, pre_freq };
         // pre_freq < min
         // if len == cap return pre_freq
@@ -62,7 +83,25 @@ impl<T: Clone, const N: usize> Cache<T, N> {
     }
 
     /// Returns the first item in the cache that matches the given predicate and reduce entry.pre_freq.
-    pub fn find<F>(&mut self, mut pred: F) -> Option<&T>
+    fn _find<F>(&mut self, mut pred: F) -> Option<&T>
+    where
+        F: FnMut(&T) -> bool,
+    {
+        for entry in self.entries.iter_mut() {
+            if pred(&entry.val) {
+                return Some(&entry.val);
+            }
+        }
+
+        if self.lru_cache.touch(pred) {
+            return self.lru_cache.front();
+        }
+
+        None
+    }
+
+    /// Returns the first item in the cache that matches the given predicate.
+    fn _lookup<F>(&mut self, mut pred: F) -> Option<&T>
     where
         F: FnMut(&T) -> bool,
     {
@@ -86,16 +125,16 @@ impl<T: Clone, const N: usize> Cache<T, N> {
     }
 }
 
-impl<T, const N: usize> Default for Cache<T, N> {
+impl<T, const FN: usize, const RN: usize> Default for LfruCache<T, FN, RN> {
     fn default() -> Self {
-        let cache = Cache {
+        let cache = LfruCache {
             entries: arrayvec::ArrayVec::new(),
             lru_cache: Default::default(),
             min: i16::MAX,
             tail: 0,
         };
         assert!(
-            cache.entries.capacity() < u16::max_value() as usize,
+            cache.entries.capacity() < u16::MAX as usize,
             "Capacity overflow"
         );
         cache
@@ -134,13 +173,13 @@ mod tests {
 
     #[test]
     fn insert_and_find() {
-        let mut cacher: Cache<PieceEnrty, 10> = Cache::default();
-        cacher.insert(PieceEnrty::new(0), 0);
+        let mut cacher: LfruCache<PieceEnrty, 10, 10> = LfruCache::default();
+        cacher.insert_with_weight(PieceEnrty::new(0), 0);
         let ret = cacher.find(|item| item.piece_index == 0u64.into());
         assert!(ret.is_some());
 
         for i in 1..=11 {
-            cacher.insert(PieceEnrty::new(i), i.into());
+            cacher.insert_with_weight(PieceEnrty::new(i), i.into());
         }
 
         let ret_1 = cacher
@@ -164,9 +203,9 @@ mod tests {
             assert!(ret.is_some());
         }
 
-        cacher.insert(PieceEnrty::new(0), 0);
+        cacher.insert_with_weight(PieceEnrty::new(0), 0);
         for i in 12..=21 {
-            cacher.insert(PieceEnrty::new(i), i.into());
+            cacher.insert_with_weight(PieceEnrty::new(i), i.into());
         }
 
         let ret = cacher

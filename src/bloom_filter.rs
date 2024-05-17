@@ -1,5 +1,5 @@
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct BloomFilter<T: ?Sized> {
+pub struct BloomFilter<T> {
     capacity: usize,
     k_num: usize,
     sips: [siphasher::sip::SipHasher13; 2],
@@ -8,7 +8,9 @@ pub struct BloomFilter<T: ?Sized> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: ?Sized> BloomFilter<T> {
+impl<T> BloomFilter<T> {
+    pub const BLOOM_METADATA: &'static str = "bloom_metadata.bin";
+
     pub fn new_for_fp_rate(items_count: usize, fp_p: f64) -> Self {
         let capacity = Self::compute_capacity(items_count, fp_p);
         let mut seed = [0u8; 32];

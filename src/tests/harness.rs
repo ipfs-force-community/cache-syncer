@@ -187,10 +187,10 @@ impl crate::DiskCache for DiskPieceCache {
 
     fn store(
         &mut self,
-        key: Self::Key,
+        key: &Self::Key,
         value: Self::Value,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
-        self.write_piece(key, value)
+        self.write_piece(*key, value)
     }
 
     fn exist(&self, key: &Self::Key) -> impl std::future::Future<Output = bool> + Send {
@@ -199,5 +199,31 @@ impl crate::DiskCache for DiskPieceCache {
 
     fn directory(&self) -> &std::path::Path {
         self.inner.piece_dir.as_path()
+    }
+}
+
+pub(crate) struct FakeDiskCache;
+
+impl crate::DiskCache for FakeDiskCache {
+    type Key = PieceIndex;
+
+    type Value = Piece;
+
+    type Error = DiskPieceCacheError;
+
+    async fn load(&self, _key: &Self::Key) -> Result<Option<Self::Value>, Self::Error> {
+        Ok(None)
+    }
+
+    async fn store(&mut self, _key: &Self::Key, _value: Self::Value) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn exist(&self, _key: &Self::Key) -> bool {
+        false
+    }
+
+    fn directory(&self) -> &Path {
+        Path::new("./pieces-cache/0")
     }
 }

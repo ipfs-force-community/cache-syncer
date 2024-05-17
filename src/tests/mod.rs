@@ -11,7 +11,7 @@ use tokio::{
 use anyhow::Result;
 use std::{path::Path, sync::Arc, time::Duration};
 
-use crate::{SyncStatus, Syncer};
+use crate::{tests::harness::FakeDiskCache, LfuTwoQueues, SyncStatus, Syncer};
 
 enum Event {
     Load(PieceIndex),
@@ -135,7 +135,9 @@ async fn integration() {
         1_000_000,
         0.01,
         std::time::Duration::from_secs(10),
-    );
+    )
+    .await
+    .unwrap();
 
     // worker 1
     let tx1 = tx.clone();
@@ -192,6 +194,8 @@ async fn touch_and_wait_in_process_backoff() {
         0.01,
         std::time::Duration::from_secs(1),
     )
+    .await
+    .unwrap()
     .into();
 
     let now = Instant::now();
@@ -248,6 +252,8 @@ async fn touch_many_and_wait_in_process_backoff() {
         0.01,
         std::time::Duration::from_secs(1),
     )
+    .await
+    .unwrap()
     .into();
 
     let now = Instant::now();
@@ -308,4 +314,46 @@ async fn touch_many_and_wait_in_process_backoff() {
     });
 
     run(rx, syncer, disk_cache).await
+}
+
+#[tokio::test]
+async fn lfu_two_queues() {
+    let disk_cache = FakeDiskCache;
+    let cacher: LfuTwoQueues<PieceIndex, Piece, FakeDiskCache, 3, 1> =
+        LfuTwoQueues::new(disk_cache, 1_000_000, 0.01)
+            .await
+            .unwrap();
+
+    let ret = cacher.load(&1u64.into(), 1).await.unwrap();
+    assert!(ret.is_none());
+
+    cacher
+        .store(1u64.into(), Piece::default(), 1)
+        .await
+        .unwrap();
+    let ret = cacher.load(&1u64.into(), 1).await.unwrap();
+    assert!(ret.is_some());
+
+    for i in 2..=3 {
+        cacher
+            .store(i.into(), Piece::default(), i as usize)
+            .await
+            .unwrap();
+    }
+    let ret = cacher.load(&1u64.into(), 1).await.unwrap();
+    assert!(ret.is_some());
+
+    cacher
+        .store(4.into(), Piece::default(), 4usize)
+        .await
+        .unwrap();
+    let ret = cacher.load(&1u64.into(), 1).await.unwrap();
+    assert!(ret.is_some());
+
+    cacher
+        .store(5.into(), Piece::default(), 5usize)
+        .await
+        .unwrap();
+    let ret = cacher.load(&1u64.into(), 1).await.unwrap();
+    assert!(ret.is_none());
 }
