@@ -1,3 +1,5 @@
+#![feature(fs_try_exists)]
+
 #[cfg(test)]
 mod tests;
 

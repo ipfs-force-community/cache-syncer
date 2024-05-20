@@ -11,5 +11,6 @@ pub trait DiskCache<K, V> {
         value: V,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
     fn exist(&self, key: &K) -> impl std::future::Future<Output = bool> + Send;
+    fn exist_sync(&self, key: &K) -> bool;
     fn directory(&self) -> &std::path::Path;
 }

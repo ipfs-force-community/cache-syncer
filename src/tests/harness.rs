@@ -131,6 +131,11 @@ impl DiskPieceCache {
         tokio::fs::try_exists(filename).await.unwrap_or(false)
     }
 
+    pub fn has_piece_sync(&self, piece_index: PieceIndex) -> bool {
+        let (filename, _) = self.piece_filenames(piece_index);
+        std::fs::try_exists(filename).unwrap_or(false)
+    }
+
     /// Read piece from cache
     pub async fn read_piece(
         &self,
@@ -193,6 +198,10 @@ impl crate::DiskCache<PieceIndex, Piece> for DiskPieceCache {
         self.has_piece(*key)
     }
 
+    fn exist_sync(&self, key: &PieceIndex) -> bool {
+        self.has_piece_sync(*key)
+    }
+
     fn directory(&self) -> &std::path::Path {
         self.inner.piece_dir.as_path()
     }
@@ -212,6 +221,10 @@ impl crate::DiskCache<PieceIndex, Piece> for FakeDiskCache {
     }
 
     async fn exist(&self, _key: &PieceIndex) -> bool {
+        false
+    }
+
+    fn exist_sync(&self, _key: &PieceIndex) -> bool {
         false
     }
 
