@@ -52,7 +52,7 @@ struct Inner<K: Clone + Eq, V: Clone, D: DiskCache<K, V>, const N: usize> {
 impl<K, V, D, const N: usize> Inner<K, V, D, N>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
-    V: Hash + Clone,
+    V: Clone,
     D: DiskCache<K, V>,
 {
     async fn new(
