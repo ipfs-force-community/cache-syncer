@@ -1,15 +1,18 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, hash::Hash, time::Duration};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::time::Duration;
 
 use crate::{default_cacher::CacheEntry, DefaultCacher, DiskCache, LfruCache};
 
-pub struct Syncer<K: Clone + Eq + Hash, V: Clone, D: DiskCache<K, V>, const N: usize> {
+pub struct Syncer<K: Eq + Clone, V: Clone, D: DiskCache<K, V>, const N: usize> {
     inner: tokio::sync::Mutex<Inner<K, V, D, N>>,
 }
 
 impl<K, V, D, const N: usize> Syncer<K, V, D, N>
 where
-    K: Hash + Clone + Eq + TryFrom<String>,
+    K: Eq + Hash + Clone + Debug + TryFrom<String>,
     V: Hash + Clone,
     D: DiskCache<K, V>,
 {
@@ -51,7 +54,7 @@ struct Inner<K: Clone + Eq, V: Clone, D: DiskCache<K, V>, const N: usize> {
 
 impl<K, V, D, const N: usize> Inner<K, V, D, N>
 where
-    K: Hash + Clone + Eq + TryFrom<String>,
+    K: Eq + Hash + Clone + Debug + TryFrom<String>,
     V: Clone,
     D: DiskCache<K, V>,
 {

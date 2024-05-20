@@ -1,9 +1,10 @@
+use std::fmt::Debug;
 use std::hash::Hash;
 
 use crate::{default_cacher::CacheEntry, DefaultCacher, DiskCache, LfruCache};
 
 pub struct LfuTwoQueues<
-    K: Clone + Eq + Hash,
+    K: Eq + Hash + Clone + Debug,
     V: Clone,
     D: DiskCache<K, V>,
     const FN: usize,
@@ -14,7 +15,7 @@ pub struct LfuTwoQueues<
 
 impl<K, V, D, const FN: usize, const RN: usize> LfuTwoQueues<K, V, D, FN, RN>
 where
-    K: Hash + Clone + Eq + TryFrom<String>,
+    K: Eq + Hash + Clone + Debug + TryFrom<String>,
     V: Clone,
     D: DiskCache<K, V>,
 {
@@ -43,7 +44,7 @@ struct Inner<K: Clone + Eq, V: Clone, D: DiskCache<K, V>, const FN: usize, const
 
 impl<K, V, D, const FN: usize, const RN: usize> Inner<K, V, D, FN, RN>
 where
-    K: Hash + Clone + Eq + TryFrom<String>,
+    K: Eq + Hash + Clone + Debug + TryFrom<String>,
     V: Clone,
     D: DiskCache<K, V>,
 {

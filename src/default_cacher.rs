@@ -1,7 +1,8 @@
-use tracing::trace;
-
 use crate::{BloomFilter, Cache, DiskCache};
-use std::{hash::Hash, marker::PhantomData};
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::marker::PhantomData;
+use tracing::trace;
 
 pub struct DefaultCacher<K: Eq, V, C, D: DiskCache<K, V>> {
     pub bloom_filter: BloomFilter<K>,
@@ -13,7 +14,7 @@ pub struct DefaultCacher<K: Eq, V, C, D: DiskCache<K, V>> {
 
 impl<K, V, C, D> DefaultCacher<K, V, C, D>
 where
-    K: Hash + Clone + Eq + TryFrom<String>,
+    K: Eq + Hash + Clone + Debug + TryFrom<String>,
     V: Clone,
     C: Cache<CacheEntry<K, V>>,
     D: DiskCache<K, V>,
@@ -57,13 +58,13 @@ where
         F: FnMut(&mut DefaultCacher<K, V, C, D>, &K) -> Option<V>,
     {
         if !self.bloom_filter.check(key) {
-            trace!("not exist in bloom filter");
+            trace!(key = ?key, "not exist in bloom filter");
             return None;
         }
 
         let maybe = hot_cache_op(self, key);
         if maybe.is_some() {
-            trace!("get from hot cache");
+            trace!(key = ?key, "get from hot cache");
             return maybe;
         }
 
@@ -84,6 +85,7 @@ where
 
     pub async fn load_from_disk(&mut self, key: &K, weight: usize) -> Option<V> {
         self.disk_cache.load(key).await.ok()?.map(|v| {
+            trace!(key = ?key, "load from disk");
             self.hot_cache
                 .insert_with_weight(CacheEntry::new(key.clone(), v.clone()), weight);
             v

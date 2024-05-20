@@ -6,7 +6,7 @@ use std::{
 };
 
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PieceIndex(u64);
 
 impl From<u64> for PieceIndex {
