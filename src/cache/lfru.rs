@@ -83,7 +83,7 @@ impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
     }
 
     /// Returns the first item in the cache that matches the given predicate and reduce entry.pre_freq.
-    fn _find<F>(&mut self, mut pred: F) -> Option<&T>
+    fn _lookup<F>(&mut self, mut pred: F) -> Option<&T>
     where
         F: FnMut(&T) -> bool,
     {
@@ -101,7 +101,7 @@ impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
     }
 
     /// Returns the first item in the cache that matches the given predicate.
-    fn _lookup<F>(&mut self, mut pred: F) -> Option<&T>
+    fn _find<F>(&mut self, mut pred: F) -> Option<&T>
     where
         F: FnMut(&T) -> bool,
     {

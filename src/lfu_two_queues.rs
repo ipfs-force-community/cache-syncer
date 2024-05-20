@@ -22,6 +22,10 @@ where
         self.inner.lock().await.load(key, weight).await
     }
 
+    pub async fn lookup(&self, key: &K, weight: usize) -> anyhow::Result<Option<V>> {
+        self.inner.lock().await.lookup(key, weight).await
+    }
+
     pub async fn store(&self, index: K, value: V, weight: usize) -> anyhow::Result<()> {
         self.inner.lock().await.store(index, value, weight).await
     }
@@ -48,6 +52,16 @@ where
     }
 
     async fn load(&mut self, key: &K, weight: usize) -> anyhow::Result<Option<V>> {
-        Ok(self.cacher.load(key, weight).await)
+        Ok(self
+            .cacher
+            .load(key, weight, DefaultCacher::load_from_hot_cache)
+            .await)
+    }
+
+    async fn lookup(&mut self, key: &K, weight: usize) -> anyhow::Result<Option<V>> {
+        Ok(self
+            .cacher
+            .load(key, weight, DefaultCacher::lookup_hot_cache)
+            .await)
     }
 }

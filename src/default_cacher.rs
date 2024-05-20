@@ -37,35 +37,6 @@ where
         Ok(cacher)
     }
 
-    pub async fn load(&mut self, key: &K, weight: usize) -> Option<V> {
-        if !self.bloom_filter.check(key) {
-            trace!("not exist in bloom filter");
-            return None;
-        }
-
-        let maybe = self.load_from_hot_cache(key);
-        if maybe.is_some() {
-            trace!("get from hot cache");
-            return maybe;
-        }
-
-        self.load_from_disk(key, weight).await
-    }
-
-    pub async fn load_from_disk(&mut self, key: &K, weight: usize) -> Option<V> {
-        self.disk_cache.load(key).await.ok()?.map(|v| {
-            self.hot_cache
-                .insert_with_weight(CacheEntry::new(key.clone(), v.clone()), weight);
-            v
-        })
-    }
-
-    pub fn load_from_hot_cache(&mut self, key: &K) -> Option<V> {
-        self.hot_cache
-            .find(|item| &item.key == key)
-            .map(|item| item.value.clone())
-    }
-
     pub async fn store(&mut self, key: K, value: V, weight: usize) -> anyhow::Result<()> {
         // set bloom filter
         self.bloom_filter.set(&key);
@@ -76,6 +47,44 @@ where
             .insert_with_weight(CacheEntry::new(key, value), weight);
 
         Ok(())
+    }
+
+    pub async fn load<F>(&mut self, key: &K, weight: usize, mut hot_cache_op: F) -> Option<V>
+    where
+        F: FnMut(&mut DefaultCacher<K, C, D>, &K) -> Option<V>,
+    {
+        if !self.bloom_filter.check(key) {
+            trace!("not exist in bloom filter");
+            return None;
+        }
+
+        let maybe = hot_cache_op(self, key);
+        if maybe.is_some() {
+            trace!("get from hot cache");
+            return maybe;
+        }
+
+        self.load_from_disk(key, weight).await
+    }
+
+    pub fn load_from_hot_cache(&mut self, key: &K) -> Option<V> {
+        self.hot_cache
+            .find(|item| &item.key == key)
+            .map(|item| item.value.clone())
+    }
+
+    pub fn lookup_hot_cache(&mut self, key: &K) -> Option<V> {
+        self.hot_cache
+            .lookup(|item| &item.key == key)
+            .map(|item| item.value.clone())
+    }
+
+    pub async fn load_from_disk(&mut self, key: &K, weight: usize) -> Option<V> {
+        self.disk_cache.load(key).await.ok()?.map(|v| {
+            self.hot_cache
+                .insert_with_weight(CacheEntry::new(key.clone(), v.clone()), weight);
+            v
+        })
     }
 
     // TODO: use mmap to sync data
