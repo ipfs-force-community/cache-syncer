@@ -73,12 +73,12 @@ where
         let maybe = hot_cache_op(self, key);
         if maybe.is_some() {
             self.in_hotcache += 1;
+            let hit_ratio = self.in_hotcache as f64 / self.requested as f64;
             trace!(
                 key = ?key,
                 elapsed = ?instant.elapsed(),
                 %self.requested, %self.in_hotcache,
-                hit_ratio = self.in_hotcache / self.requested,
-                "Got from hot cache",
+                "Got from hot cache, hit_ratio: {:.2}", hit_ratio
             );
             return maybe;
         }
