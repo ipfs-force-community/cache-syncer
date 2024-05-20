@@ -15,7 +15,7 @@ pub struct LfuTwoQueues<
 impl<K, V, D, const FN: usize, const RN: usize> LfuTwoQueues<K, V, D, FN, RN>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
-    V: Hash + Clone,
+    V: Clone,
     D: DiskCache<K, V>,
 {
     pub async fn new(disk_cache: D, items_count: usize, fp_p: f64) -> anyhow::Result<Self> {
@@ -44,7 +44,7 @@ struct Inner<K: Clone + Eq, V: Clone, D: DiskCache<K, V>, const FN: usize, const
 impl<K, V, D, const FN: usize, const RN: usize> Inner<K, V, D, FN, RN>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
-    V: Hash + Clone,
+    V: Clone,
     D: DiskCache<K, V>,
 {
     async fn new(disk_cache: D, items_count: usize, fp_p: f64) -> anyhow::Result<Self> {
