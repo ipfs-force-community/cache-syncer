@@ -83,7 +83,7 @@ where
             return maybe;
         }
 
-        self.load_from_disk(key, weight).await
+        self.load_from_disk(key, weight, instant).await
     }
 
     pub fn load_from_hot_cache(&mut self, key: &K) -> Option<V> {
@@ -98,9 +98,14 @@ where
             .map(|item| item.value.clone())
     }
 
-    pub async fn load_from_disk(&mut self, key: &K, weight: usize) -> Option<V> {
+    pub async fn load_from_disk(
+        &mut self,
+        key: &K,
+        weight: usize,
+        instant: std::time::Instant,
+    ) -> Option<V> {
         self.disk_cache.load(key).await.ok()?.map(|v| {
-            trace!(key = ?key, "load from disk");
+            trace!(key = ?key, elapsed = ?instant.elapsed(), "load from disk");
             self.hot_cache
                 .insert_with_weight(CacheEntry::new(key.clone(), v.clone()), weight);
             v
@@ -113,9 +118,9 @@ where
 
     // TODO: use mmap to sync data
     pub async fn init_bloom_filter(&mut self) -> anyhow::Result<()> {
-        let disk_dir = self.disk_cache.directory();
-        // let bloom_path = disk_dir.join(BloomFilter::<K>::BLOOM_METADATA);
+        let instant = std::time::Instant::now();
 
+        let disk_dir = self.disk_cache.directory();
         let mut dirs = vec![];
         let mut disk_dir = tokio::fs::read_dir(disk_dir).await.unwrap();
         while let Ok(Some(dir_entry)) = disk_dir.next_entry().await {
@@ -140,6 +145,11 @@ where
         keys.into_iter()
             .filter_map(|k| k.try_into().ok())
             .for_each(|key| self.bloom_filter.set(&key));
+
+        trace!(
+            elapsed = ?instant.elapsed(),
+            "Inited bloom filter",
+        );
 
         Ok(())
     }
