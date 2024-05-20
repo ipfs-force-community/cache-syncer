@@ -170,30 +170,26 @@ impl DiskPieceCache {
     }
 }
 
-impl crate::DiskCache for DiskPieceCache {
-    type Key = PieceIndex;
-
-    type Value = Piece;
-
+impl crate::DiskCache<PieceIndex, Piece> for DiskPieceCache {
     type Error = DiskPieceCacheError;
 
     fn load(
         &self,
-        key: &Self::Key,
-    ) -> impl std::future::Future<Output = Result<Option<Self::Value>, Self::Error>> + Send {
+        key: &PieceIndex,
+    ) -> impl std::future::Future<Output = Result<Option<Piece>, Self::Error>> + Send {
         println!("DiskPieceCache wait for load");
         self.read_piece(*key)
     }
 
     fn store(
         &mut self,
-        key: &Self::Key,
-        value: Self::Value,
+        key: &PieceIndex,
+        value: Piece,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
         self.write_piece(*key, value)
     }
 
-    fn exist(&self, key: &Self::Key) -> impl std::future::Future<Output = bool> + Send {
+    fn exist(&self, key: &PieceIndex) -> impl std::future::Future<Output = bool> + Send {
         self.has_piece(*key)
     }
 
@@ -204,22 +200,18 @@ impl crate::DiskCache for DiskPieceCache {
 
 pub(crate) struct FakeDiskCache;
 
-impl crate::DiskCache for FakeDiskCache {
-    type Key = PieceIndex;
-
-    type Value = Piece;
-
+impl crate::DiskCache<PieceIndex, Piece> for FakeDiskCache {
     type Error = DiskPieceCacheError;
 
-    async fn load(&self, _key: &Self::Key) -> Result<Option<Self::Value>, Self::Error> {
+    async fn load(&self, _key: &PieceIndex) -> Result<Option<Piece>, Self::Error> {
         Ok(None)
     }
 
-    async fn store(&mut self, _key: &Self::Key, _value: Self::Value) -> Result<(), Self::Error> {
+    async fn store(&mut self, _key: &PieceIndex, _value: Piece) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    async fn exist(&self, _key: &Self::Key) -> bool {
+    async fn exist(&self, _key: &PieceIndex) -> bool {
         false
     }
 

@@ -1,20 +1,22 @@
 use tracing::trace;
 
 use crate::{BloomFilter, Cache, DiskCache};
-use std::hash::Hash;
+use std::{hash::Hash, marker::PhantomData};
 
-pub struct DefaultCacher<K: Eq, C, D> {
+pub struct DefaultCacher<K: Eq, V, C, D: DiskCache<K, V>> {
     pub bloom_filter: BloomFilter<K>,
     pub hot_cache: C,
     pub disk_cache: D,
+
+    _v: PhantomData<V>,
 }
 
-impl<K, V, C, D> DefaultCacher<K, C, D>
+impl<K, V, C, D> DefaultCacher<K, V, C, D>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
     V: Clone,
     C: Cache<CacheEntry<K, V>>,
-    D: DiskCache<Key = K, Value = V>,
+    D: DiskCache<K, V>,
 {
     pub fn new(disk_cache: D, items_count: usize, fp_p: f64) -> Self {
         let hot_cache = C::default();
@@ -23,6 +25,7 @@ where
             bloom_filter,
             hot_cache,
             disk_cache,
+            _v: PhantomData,
         }
     }
 
@@ -51,7 +54,7 @@ where
 
     pub async fn load<F>(&mut self, key: &K, weight: usize, mut hot_cache_op: F) -> Option<V>
     where
-        F: FnMut(&mut DefaultCacher<K, C, D>, &K) -> Option<V>,
+        F: FnMut(&mut DefaultCacher<K, V, C, D>, &K) -> Option<V>,
     {
         if !self.bloom_filter.check(key) {
             trace!("not exist in bloom filter");

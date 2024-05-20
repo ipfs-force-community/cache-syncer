@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash::Hash, time::Duration};
 
 use crate::{default_cacher::CacheEntry, DefaultCacher, DiskCache, LfruCache};
 
-pub struct Syncer<K: Clone + Eq + Hash, V: Clone, D, const N: usize> {
+pub struct Syncer<K: Clone + Eq + Hash, V: Clone, D: DiskCache<K, V>, const N: usize> {
     inner: tokio::sync::Mutex<Inner<K, V, D, N>>,
 }
 
@@ -11,7 +11,7 @@ impl<K, V, D, const N: usize> Syncer<K, V, D, N>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
     V: Hash + Clone,
-    D: DiskCache<Key = K, Value = V>,
+    D: DiskCache<K, V>,
 {
     pub async fn new(
         disk_cache: D,
@@ -43,8 +43,8 @@ where
     }
 }
 
-struct Inner<K: Clone + Eq, V: Clone, D, const N: usize> {
-    cacher: DefaultCacher<K, LfruCache<CacheEntry<K, V>, N, N>, D>,
+struct Inner<K: Clone + Eq, V: Clone, D: DiskCache<K, V>, const N: usize> {
+    cacher: DefaultCacher<K, V, LfruCache<CacheEntry<K, V>, N, N>, D>,
     in_process: HashMap<K, ProcessEntry>,
     timeout: Duration,
 }
@@ -53,7 +53,7 @@ impl<K, V, D, const N: usize> Inner<K, V, D, N>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
     V: Hash + Clone,
-    D: DiskCache<Key = K, Value = V>,
+    D: DiskCache<K, V>,
 {
     async fn new(
         disk_cache: D,

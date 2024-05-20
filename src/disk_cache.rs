@@ -1,17 +1,15 @@
-pub trait DiskCache {
-    type Key;
-    type Value;
+pub trait DiskCache<K, V> {
     type Error: std::error::Error + Send + Sync + 'static;
 
     fn load(
         &self,
-        key: &Self::Key,
-    ) -> impl std::future::Future<Output = Result<Option<Self::Value>, Self::Error>> + Send;
+        key: &K,
+    ) -> impl std::future::Future<Output = Result<Option<V>, Self::Error>> + Send;
     fn store(
         &mut self,
-        key: &Self::Key,
-        value: Self::Value,
+        key: &K,
+        value: V,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send;
-    fn exist(&self, key: &Self::Key) -> impl std::future::Future<Output = bool> + Send;
+    fn exist(&self, key: &K) -> impl std::future::Future<Output = bool> + Send;
     fn directory(&self) -> &std::path::Path;
 }

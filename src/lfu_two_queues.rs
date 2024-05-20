@@ -2,7 +2,13 @@ use std::hash::Hash;
 
 use crate::{default_cacher::CacheEntry, DefaultCacher, DiskCache, LfruCache};
 
-pub struct LfuTwoQueues<K: Clone + Eq + Hash, V: Clone, D, const FN: usize, const RN: usize> {
+pub struct LfuTwoQueues<
+    K: Clone + Eq + Hash,
+    V: Clone,
+    D: DiskCache<K, V>,
+    const FN: usize,
+    const RN: usize,
+> {
     inner: tokio::sync::Mutex<Inner<K, V, D, FN, RN>>,
 }
 
@@ -10,7 +16,7 @@ impl<K, V, D, const FN: usize, const RN: usize> LfuTwoQueues<K, V, D, FN, RN>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
     V: Hash + Clone,
-    D: DiskCache<Key = K, Value = V>,
+    D: DiskCache<K, V>,
 {
     pub async fn new(disk_cache: D, items_count: usize, fp_p: f64) -> anyhow::Result<Self> {
         Ok(Self {
@@ -31,15 +37,15 @@ where
     }
 }
 
-struct Inner<K: Clone + Eq, V: Clone, D, const FN: usize, const RN: usize> {
-    cacher: DefaultCacher<K, LfruCache<CacheEntry<K, V>, FN, RN>, D>,
+struct Inner<K: Clone + Eq, V: Clone, D: DiskCache<K, V>, const FN: usize, const RN: usize> {
+    cacher: DefaultCacher<K, V, LfruCache<CacheEntry<K, V>, FN, RN>, D>,
 }
 
 impl<K, V, D, const FN: usize, const RN: usize> Inner<K, V, D, FN, RN>
 where
     K: Hash + Clone + Eq + TryFrom<String>,
     V: Hash + Clone,
-    D: DiskCache<Key = K, Value = V>,
+    D: DiskCache<K, V>,
 {
     async fn new(disk_cache: D, items_count: usize, fp_p: f64) -> anyhow::Result<Self> {
         let cacher = DefaultCacher::new_and_init_bloom(disk_cache, items_count, fp_p).await?;
