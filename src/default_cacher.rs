@@ -9,6 +9,9 @@ pub struct DefaultCacher<K: Eq, V, C, D: DiskCache<K, V>> {
     pub hot_cache: C,
     pub disk_cache: D,
 
+    requested: u128,
+    in_hotcache: u128,
+
     _v: PhantomData<V>,
 }
 
@@ -26,6 +29,9 @@ where
             bloom_filter,
             hot_cache,
             disk_cache,
+            requested: 0,
+            in_hotcache: 0,
+
             _v: PhantomData,
         }
     }
@@ -57,14 +63,23 @@ where
     where
         F: FnMut(&mut DefaultCacher<K, V, C, D>, &K) -> Option<V>,
     {
+        let instant = std::time::Instant::now();
+        self.requested += 1;
         if !self.bloom_filter.check(key) {
-            trace!(key = ?key, "not exist in bloom filter");
+            trace!(key = ?key, elapsed = ?instant.elapsed(), "Not exist in bloom filter");
             return None;
         }
 
         let maybe = hot_cache_op(self, key);
         if maybe.is_some() {
-            trace!(key = ?key, "get from hot cache");
+            self.in_hotcache += 1;
+            trace!(
+                key = ?key,
+                elapsed = ?instant.elapsed(),
+                %self.requested, %self.in_hotcache,
+                hit_ratio = self.in_hotcache / self.requested,
+                "Got from hot cache",
+            );
             return maybe;
         }
 
