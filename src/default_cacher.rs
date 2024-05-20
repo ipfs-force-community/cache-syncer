@@ -90,6 +90,10 @@ where
         })
     }
 
+    pub fn disk_cacher(&self) -> &D {
+        &self.disk_cache
+    }
+
     // TODO: use mmap to sync data
     pub async fn init_bloom_filter(&mut self) -> anyhow::Result<()> {
         let disk_dir = self.disk_cache.directory();
