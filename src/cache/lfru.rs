@@ -3,7 +3,7 @@ use super::Cache;
 #[derive(Debug)]
 pub struct LfruCache<T, const FN: usize, const RN: usize> {
     pub(self) entries: arrayvec::ArrayVec<Entry<T>, FN>,
-    pub(self) lru_cache: uluru::LRUCache<T, RN>,
+    pub(self) lru_cache: Option<uluru::LRUCache<T, RN>>,
     /// Index of the min entry. Because our frequency will only decrease, so we don't need to store the index `head`.
     tail: u16,
     min: i16,
@@ -79,7 +79,7 @@ impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
     }
 
     pub fn insert_into_lru(&mut self, val: T) -> Option<T> {
-        self.lru_cache.insert(val)
+        self.lru_cache.as_mut().and_then(|lc| lc.insert(val))
     }
 
     /// Returns the first item in the cache that matches the given predicate and reduce entry.pre_freq.
@@ -93,8 +93,10 @@ impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
             }
         }
 
-        if self.lru_cache.touch(pred) {
-            return self.lru_cache.front();
+        if let Some(lc) = self.lru_cache.as_mut() {
+            if lc.touch(pred) {
+                return lc.front();
+            }
         }
 
         None
@@ -117,8 +119,10 @@ impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
             }
         }
 
-        if self.lru_cache.touch(pred) {
-            return self.lru_cache.front();
+        if let Some(lc) = self.lru_cache.as_mut() {
+            if lc.touch(pred) {
+                return lc.front();
+            }
         }
 
         None
@@ -127,9 +131,14 @@ impl<T, const FN: usize, const RN: usize> LfruCache<T, FN, RN> {
 
 impl<T, const FN: usize, const RN: usize> Default for LfruCache<T, FN, RN> {
     fn default() -> Self {
+        let lru_cache = if RN == 0 {
+            None
+        } else {
+            Some(Default::default())
+        };
         let cache = LfruCache {
             entries: arrayvec::ArrayVec::new(),
-            lru_cache: Default::default(),
+            lru_cache,
             min: i16::MAX,
             tail: 0,
         };
@@ -172,6 +181,41 @@ mod tests {
     }
 
     #[test]
+    fn new_without_lru() {
+        let mut cacher: LfruCache<PieceEnrty, 10, 0> = LfruCache::default();
+        cacher.insert_with_weight(PieceEnrty::new(0), 0);
+        let ret = cacher.find(|item| item.piece_index == 0u64.into());
+        assert!(ret.is_some());
+
+        assert!(
+            cacher.entries.len() == 1,
+            "lfu cache len: {}",
+            cacher.entries.len()
+        );
+
+        assert!(
+            cacher.lru_cache.is_none(),
+            "lru cache len: {}",
+            cacher.lru_cache.is_none()
+        );
+
+        for i in 1..=12 {
+            cacher.insert_with_weight(PieceEnrty::new(i), i.into());
+        }
+
+        assert!(
+            cacher.entries.len() == 10,
+            "lfu cache len: {}",
+            cacher.entries.len()
+        );
+        assert!(
+            cacher.lru_cache.is_none(),
+            "lru cache len: {}",
+            cacher.lru_cache.is_none()
+        );
+    }
+
+    #[test]
     fn insert_and_find() {
         let mut cacher: LfruCache<PieceEnrty, 10, 10> = LfruCache::default();
         cacher.insert_with_weight(PieceEnrty::new(0), 0);
@@ -191,9 +235,9 @@ mod tests {
         assert!(ret_1.is_some());
         assert!(ret_2.is_some());
         assert!(
-            cacher.lru_cache.len() == 2,
+            cacher.lru_cache.as_ref().unwrap().len() == 2,
             "lru cache len: {}",
-            cacher.lru_cache.len()
+            cacher.lru_cache.as_ref().unwrap().len()
         );
 
         for _ in 0..11 {
