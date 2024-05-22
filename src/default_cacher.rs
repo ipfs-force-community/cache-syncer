@@ -63,21 +63,28 @@ where
     where
         F: FnMut(&mut DefaultCacher<K, V, C, D>, &K) -> Option<V>,
     {
-        let instant = std::time::Instant::now();
+        let mut instant = std::time::Instant::now();
         self.requested += 1;
         if !self.bloom_filter.check(key) {
             trace!(key = ?key, elapsed = ?instant.elapsed(), "Not exist in bloom filter");
             return None;
         }
 
+        let check_bloom_elapsed = instant.elapsed();
+        trace!(?key, elapsed = ?check_bloom_elapsed, "Check by bloom filter");
+        instant += check_bloom_elapsed;
+
         let maybe = hot_cache_op(self, key);
+        let check_hot_cache_elapsed = instant.elapsed();
+        trace!(?key, elapsed = ?check_hot_cache_elapsed, "Check hot cache");
+        instant += check_hot_cache_elapsed;
         if maybe.is_some() {
             self.in_hotcache += 1;
             let hit_ratio = self.in_hotcache as f64 / self.requested as f64;
             trace!(
-                key = ?key,
-                elapsed = ?instant.elapsed(),
-                %self.requested, %self.in_hotcache,
+                ?key,
+                requested = %self.requested,
+                in_hotcache = %self.in_hotcache,
                 "Got from hot cache, hit_ratio: {:.2}", hit_ratio
             );
             return maybe;
@@ -105,7 +112,7 @@ where
         instant: std::time::Instant,
     ) -> Option<V> {
         self.disk_cache.load(key).await.ok()?.map(|v| {
-            trace!(key = ?key, elapsed = ?instant.elapsed(), "load from disk");
+            trace!(key = ?key, elapsed = ?instant.elapsed(), "Load from disk");
             self.hot_cache
                 .insert_with_weight(CacheEntry::new(key.clone(), v.clone()), weight);
             v
