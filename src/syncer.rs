@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::{default_cacher::CacheEntry, DefaultCacher, DiskCache, LfruCache};
 
 pub struct Syncer<K: Eq + Clone, V: Clone, D: DiskCache<K, V>, const N: usize> {
-    inner: tokio::sync::Mutex<Inner<K, V, D, N>>,
+    inner: async_lock::Mutex<Inner<K, V, D, N>>,
 }
 
 impl<K, V, D, const N: usize> Syncer<K, V, D, N>
@@ -23,7 +23,7 @@ where
         timeout: Duration,
     ) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: tokio::sync::Mutex::new(
+            inner: async_lock::Mutex::new(
                 Inner::new(disk_cache, items_count, fp_p, timeout).await?,
             ),
         })

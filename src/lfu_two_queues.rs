@@ -10,7 +10,7 @@ pub struct LfuTwoQueues<
     const FN: usize,
     const RN: usize,
 > {
-    inner: tokio::sync::Mutex<Inner<K, V, D, FN, RN>>,
+    inner: async_lock::Mutex<Inner<K, V, D, FN, RN>>,
 }
 
 impl<K, V, D, const FN: usize, const RN: usize> LfuTwoQueues<K, V, D, FN, RN>
@@ -21,7 +21,7 @@ where
 {
     pub async fn new(disk_cache: D, items_count: usize, fp_p: f64) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: tokio::sync::Mutex::new(Inner::new(disk_cache, items_count, fp_p).await?),
+            inner: async_lock::Mutex::new(Inner::new(disk_cache, items_count, fp_p).await?),
         })
     }
 
